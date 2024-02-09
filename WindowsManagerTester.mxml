@@ -1,0 +1,1152 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mx:WindowedApplication backgroundColor="#e0e0e0"
+                        height="594"
+                        initialize="_onInitialize(event)"
+                        preinitialize="_onPreinitialize(event)"
+                        showStatusBar="false"
+                        title="Windows Manager Library - Manual Tester"
+                        width="1280"
+                        xmlns:fx="http://ns.adobe.com/mxml/2009"
+                        xmlns:mx="library://ns.adobe.com/flex/mx"
+                        xmlns:s="library://ns.adobe.com/flex/spark"
+                        layout="absolute">
+
+    <fx:Style>
+        @namespace s "library://ns.adobe.com/flex/spark";
+        @namespace mx "library://ns.adobe.com/flex/mx";
+
+        global, mx|Label, mx|Text, mx|CheckBox, mx|RadioButton, mx|ProgressBar, .invertedText {
+            fontSize: 12;
+        }
+
+        .classicLink {
+            paddingLeft: 0;
+            paddingRight: 0;
+            textDecoration: underline;
+        }
+
+        .chromeWindow {
+            backgroundColor: #e0d8d5;
+            borderStyle: solid;
+            borderColor: #000000;
+            titleBarBackgroundSkin: ClassReference("eu.claudius.iacob.windows.test.skins.ApplicationTitleBarBackgroundSkin");
+            titleBarButtonPadding: 20;
+            buttonPadding: 15;
+            closeButtonSkin: ClassReference("eu.claudius.iacob.windows.test.skins.WindowCloseButtonSkin");
+            maximizeButtonSkin: ClassReference("eu.claudius.iacob.windows.test.skins.WindowMaximizeButtonSkin");
+            restoreButtonSkin: ClassReference("eu.claudius.iacob.windows.test.skins.WindowRestoreButtonSkin");
+            minimizeButtonSkin: ClassReference("eu.claudius.iacob.windows.test.skins.WindowMinimizeButtonSkin");
+            headerHeight: 35;
+            titleBarColors: #e0d8d5, #e0d8d5;
+            titleBarCornerRadius: 0;
+            titleBarBorderColor: #e0d8d5;
+            titleBarBorderAlpha: 1;
+            titleBarBorderThickness: 1;
+            titleTextStyleName: "chromeWindowTitleStyle";
+            statusBarBackgroundSkin: ClassReference("eu.claudius.iacob.windows.test.skins.StatusBarBackgroundSkin");
+            gripperPadding: 3;
+            gripperStyleName: "chromeWindowGripperStyle";
+            statusBarColors: #e0d8d5, #e0d8d5;
+            statusBarCornerRadius: 0;
+            statusBarBorderColor: #e0d8d5;
+            statusBarBorderAlpha: 1;
+            statusBarBorderThickness: 1;
+            statusBarPaddingLeft: 10;
+            statusBarPaddingRight: 20;
+            statusBarPaddingTop: 1;
+            statusBarPaddingBottom: 4;
+            statusTextStyleName: "chromeWindowStatusStyle";
+            fontThickness: 100;
+            letterSpacing: 1;
+            lineHeight: 18;
+        }
+
+        .chromeWindowTitleStyle {
+            fontSize: 14;
+            color: #000000;
+            letterSpacing: 1;
+            textIndent: 10;
+        }
+
+        .chromeWindowStatusStyle {
+            letterSpacing: 0;
+            fontSize: 13;
+            color: #303030;
+        }
+
+        .chromeWindowGripperStyle {
+            skin: ClassReference("eu.claudius.iacob.windows.test.skins.WindowGripperSkin");
+        }
+    </fx:Style>
+
+    <fx:Script>
+		<![CDATA[
+        import eu.claudiusiacob.desktop.GlobalMenu;
+
+        import mx.collections.ArrayCollection;
+        import mx.controls.Text;
+        import mx.controls.listClasses.IListItemRenderer;
+        import mx.events.FlexEvent;
+        import mx.events.ListEvent;
+
+        import ro.ciacob.desktop.windows.BasicWindowRootContainer;
+        import ro.ciacob.desktop.windows.WindowActivity;
+        import ro.ciacob.desktop.windows.WindowStyle;
+        import ro.ciacob.desktop.windows.WindowsManager;
+        import ro.ciacob.desktop.windows.WindowsManagerEvent;
+        import ro.ciacob.utils.OSFamily;
+        import ro.ciacob.utils.Strings;
+        import ro.ciacob.utils.Time;
+
+        private static const WINDOW_UNKNOWN:String = '-1';
+        private static const LAST_TOUCHED_WINDOW:Object = {
+            uid: WINDOW_UNKNOWN,
+            label: '<last touched window>'
+        };
+        private static const DEFAULT_WIDTH:Number = 500;
+        private static const DEFAULT_HEIGHT:Number = 380;
+        private static const DEFAULT_X:Number = 200;
+        private static const DEFAULT_Y : Number = 200;
+
+        private var _styleBitmask:int = WindowStyle.MAIN;
+        private var _uiExpectsUserInput:Boolean;
+        private var _uidToSelectWhenListIsRebuilt:String;
+        private var _wManager:WindowsManager;
+        private var _windowsListDpSrc:Object;
+        private var _lastTouchedWinUid:String = WINDOW_UNKNOWN;
+        private var _globalMenu : GlobalMenu;
+
+        [Bindable]
+        private var _flatWindowsList:ArrayCollection = new ArrayCollection;
+
+        [Bindable]
+        private var _hasNativeChrome:Boolean;
+
+
+        private function _emptyFlatWindowsList():void {
+            _flatWindowsList.removeAll();
+            _flatWindowsList.addItem(LAST_TOUCHED_WINDOW);
+            _updateAlignmentUi();
+        }
+
+        private function _applyBounds(uid:String):void {
+            var givenW:Number = parseInt(windowWidth.text);
+            var givenH:Number = parseInt(windowHeight.text);
+            var givenX:Number = parseInt(windowX.text);
+            var givenY:Number = parseInt(windowY.text);
+            if (!isNaN(givenW) && !isNaN(givenH) && !isNaN(givenX) && !isNaN(givenY)) {
+                var boundaries:Rectangle = new Rectangle(givenX, givenY, givenW, givenH);
+                _wManager.updateWindowBounds(uid, boundaries, constrainMinimumToScreen.selected);
+            }
+        }
+
+        private function _applyMaxSize(uid:String):void {
+            var givenMaxW:Number = parseInt(windowMaxWidth.text);
+            var givenMinH:Number = parseInt(windowMaxHeight.text);
+            if (!isNaN(givenMaxW) && !isNaN(givenMinH)) {
+                _wManager.updateWindowMaxSize(uid, givenMaxW, givenMinH);
+            }
+        }
+
+        private function _applyMinSize(uid:String):void {
+            var givenMinW:Number = parseInt(windowMinWidth.text);
+            var givenMinH:Number = parseInt(windowMinHeight.text);
+            if (!isNaN(givenMinW) && !isNaN(givenMinH)) {
+                _wManager.updateWindowMinSize(uid, givenMinW, givenMinH);
+            }
+        }
+
+        private function _applyTitle(uid:String):void {
+            var title:String = Strings.trim(windowTitleValue.text);
+            if (_wManager.hasStyle(uid, WindowStyle.HEADER)) {
+                _wManager.updateWindowTitle(uid, title);
+            }
+        }
+
+        private function _applyStatus(uid:String):void {
+            var status:String = Strings.trim(windowStatusValue.text);
+            if (_wManager.hasStyle(uid, WindowStyle.FOOTER)) {
+                _wManager.updateWindowStatus(uid, status);
+            }
+        }
+
+        private function _findTreeItem(searchUid:String, parentObj:Object):Object {
+            if (parentObj != null) {
+                if (parentObj['uid'] == searchUid) {
+                    return parentObj;
+                }
+                if (parentObj['children'] != null && parentObj['children'] is Array && (parentObj['children'] as Array).length > 0) {
+                    for (var i:int = 0; i < (parentObj['children'] as Array).length; i++) {
+                        var childObj:Object = (parentObj['children'] as Array)[i];
+                        var matchingChild:Object = _findTreeItem(searchUid, childObj);
+                        if (matchingChild != null) {
+                            return matchingChild;
+                        }
+                    }
+
+                }
+            }
+            return null;
+        }
+
+        private function get _selectedUid():String {
+            var item:Object;
+            if ((item = windowsList.selectedItem)) {
+                return (item['uid'] as String);
+            }
+            return null;
+        }
+
+        private function _populateTextFieldsFor(uid:String):void {
+            // Gather data
+            var bounds:Rectangle = null;
+            var minSize:Point = null;
+            var maxSize:Point = null;
+            var title:String = null;
+            var status:String = null;
+            if (_wManager.isWindowAvailable(uid)) {
+                bounds = _wManager.retrieveWindowBounds(uid);
+                minSize = _wManager.retrieveWindowMinSize(uid);
+                maxSize = _wManager.retrieveWindowMaxSize(uid);
+                title = _wManager.retrieveWindowTitle(uid);
+                status = _wManager.retrieveWindowStatus(uid);
+            }
+
+            // Width, height, X, Y
+            windowWidth.text = (bounds ? bounds.width.toString() : '');
+            windowHeight.text = (bounds ? bounds.height.toString() : '');
+            windowX.text = (bounds ? bounds.x.toString() : '');
+            windowY.text = (bounds ? bounds.y.toString() : '');
+
+            // Minimum Width, Minimum Height
+            windowMinWidth.text = (minSize ? minSize.x.toString() : '');
+            windowMinHeight.text = (minSize ? minSize.y.toString() : '');
+
+            // Maximum Width, Maximum Height
+            windowMaxWidth.text = (maxSize ? maxSize.x.toString() : '');
+            windowMaxHeight.text = (maxSize ? maxSize.y.toString() : '');
+
+            // Title
+            windowTitleValue.text = (title || '');
+            windowStatusValue.text = (status || '');
+        }
+
+        private function _queryWindowsHierarchy(parentUid:String = null):Object {
+            var ret:Object = {};
+            var uidValue:String = (parentUid || 'no uid');
+            var labelValue:String = '';
+            if (parentUid == _wManager.mainWindow) {
+                _emptyFlatWindowsList();
+                labelValue = labelValue.concat('[MAIN] ');
+            }
+            if (parentUid) {
+                labelValue = labelValue.concat(_wManager.retrieveWindowTitle(parentUid));
+            }
+            labelValue = labelValue.concat(' (', uidValue, ')');
+            ret['uid'] = uidValue;
+            ret['label'] = labelValue;
+            _flatWindowsList.addItem({"uid": uidValue, "label": labelValue});
+            var childUids:Vector.<String> = _wManager.retrieveChildWindowsOf(parentUid);
+            if (childUids.length > 0) {
+                ret['children'] = [];
+                for (var i:int = 0; i < childUids.length; i++) {
+                    var childUid:String = childUids[i];
+                    var childObj:Object = _queryWindowsHierarchy(childUid);
+                    childObj['parent'] = ret;
+                    ret['children'].push(childObj);
+                }
+            } else {
+                if (parentUid == null) {
+                    // No children and no name: the list should be empty.
+                    _emptyFlatWindowsList();
+                    return null;
+                }
+            }
+            return ret;
+        }
+
+        private function _readBitmaskToStyleSetting(bitmask:int):void {
+            titleStyle.selected = ((bitmask & WindowStyle.HEADER) == WindowStyle.HEADER);
+            statusStyle.selected = ((bitmask & WindowStyle.FOOTER) == WindowStyle.FOOTER);
+            taskbarStyle.selected = ((bitmask & WindowStyle.TASKBAR) == WindowStyle.TASKBAR);
+            transparentStyle.selected = ((bitmask & WindowStyle.TRANSPARENT) == WindowStyle.TRANSPARENT);
+            _hasNativeChrome = ((bitmask & WindowStyle.NATIVE) == WindowStyle.NATIVE);
+            nativeStyle.selected = _hasNativeChrome;
+            minimizeStyle.selected = ((bitmask & WindowStyle.MINIMIZE) == WindowStyle.MINIMIZE);
+            maximizeStyle.selected = ((bitmask & WindowStyle.MAXIMIZE) == WindowStyle.MAXIMIZE);
+            resizeStyle.selected = ((bitmask & WindowStyle.RESIZE) == WindowStyle.RESIZE);
+            alwaysInFrontStyle.selected = ((bitmask & WindowStyle.TOP) == WindowStyle.TOP);
+        }
+
+        private function _readUidToStyleSetting(uid:String):void {
+            var haveWin:Boolean = _wManager.isWindowAvailable(uid);
+            titleStyle.selected = haveWin ? _wManager.hasStyle(uid, WindowStyle.HEADER) : false;
+            statusStyle.selected = haveWin ? _wManager.hasStyle(uid, WindowStyle.FOOTER) : false;
+            taskbarStyle.selected = haveWin ? _wManager.hasStyle(uid, WindowStyle.TASKBAR) : false;
+            transparentStyle.selected = haveWin ? _wManager.hasStyle(uid, WindowStyle.TRANSPARENT) : false;
+            _hasNativeChrome = haveWin ? _wManager.hasStyle(uid, WindowStyle.NATIVE) : false;
+            nativeStyle.selected = _hasNativeChrome;
+            minimizeStyle.selected = haveWin ? _wManager.hasStyle(uid, WindowStyle.MINIMIZE) : false;
+            maximizeStyle.selected = haveWin ? _wManager.hasStyle(uid, WindowStyle.MAXIMIZE) : false;
+            resizeStyle.selected = haveWin ? _wManager.hasStyle(uid, WindowStyle.RESIZE) : false;
+            alwaysInFrontStyle.selected = haveWin ? _wManager.hasStyle(uid, WindowStyle.TOP) : false;
+        }
+
+        private function _rebuildTree():void {
+            _windowsListDpSrc = _queryWindowsHierarchy();
+
+            // We keep the original query result Object as `_windowsListDpSrc`, because
+            // the Tree transparently converts it into an ArryaCollection upon assignment.
+            windowsList.dataProvider = null;
+            windowsList.addEventListener(FlexEvent.UPDATE_COMPLETE, _onTreeUpdateComplete);
+            windowsList.dataProvider = _windowsListDpSrc;
+        }
+
+        private function _selectTreeItem(item:Object, delay:Number = 0.5):void {
+            Time.delay(delay, function ():void {
+                windowsList.selectedItem = item;
+                if (item != null) {
+                    var renderer:IListItemRenderer = windowsList.itemToItemRenderer(item);
+                    if (renderer != null) {
+                        var index:int = windowsList.itemRendererToIndex(renderer);
+                        windowsList.dispatchEvent(new ListEvent(ListEvent.CHANGE, false, false, 0, index, null, renderer));
+                    }
+                } else {
+                    windowsList.dispatchEvent(new ListEvent(ListEvent.CHANGE, false, false, -1, -1, null, null));
+                }
+            });
+        }
+
+        private function _toggleTreeItem(item:Object, open:Boolean, withChildren:Boolean = false, makeVisible:Boolean =
+                false, delay:Number = 0.5):void {
+            if (item != null) {
+                Time.delay(delay, function ():void {
+                    windowsList.expandItem(item, open);
+                    // Toggle children too.
+                    if (withChildren) {
+                        windowsList.expandChildrenOf(item, open);
+                    }
+                    // EXPAND the path to this item
+                    if (makeVisible && open) {
+                        while (item != null && item['parent'] != null) {
+                            item = item['parent'];
+                            windowsList.expandItem(item, true);
+                        }
+                    }
+                });
+            }
+        }
+
+        private function _updateUI(event:Event = null):void {
+
+            var haveSelectedWin : Boolean = (windowsList.selectedItem != null);
+
+            // 'Standalone' option. Automatically ticked if no window is selected from the list.
+            if (windowsList.selectedItem == null) {
+                standaloneOption.selected = true;
+            }
+
+            // `Parented` option
+            parentedOption.label = haveSelectedWin ? 'parented by ' + _selectedUid :
+                    'parented (selection required)';
+            parentedOption.enabled = haveSelectedWin;
+
+            // `Destroy`, `Show`, `Hide` buttons
+            destroyWindow.enabled = haveSelectedWin;
+            showWindow.enabled = haveSelectedWin;
+            hideWindow.enabled = haveSelectedWin;
+            // `Maximize` and `Restore` buttons
+            var winUid:String = (haveSelectedWin ? _selectedUid : null);
+            maximizeWindow.enabled = (winUid &&
+                    _wManager.isWindowAvailable(winUid) &&
+                    _wManager.hasStyle(winUid, WindowStyle.MAXIMIZE) &&
+                    !_wManager.isWindowMaximized(winUid)
+            );
+            restoreWindow.enabled = (winUid &&
+                    _wManager.isWindowAvailable(winUid) &&
+                    _wManager.hasStyle(winUid, WindowStyle.MAXIMIZE) &&
+                    _wManager.isWindowMaximized(winUid));
+
+            // `Create` button
+            createWindow.enabled = haveSelectedWin || (!parentedOption.selected || !parentedOption.enabled);
+
+            // Styles
+            if (haveSelectedWin) {
+                _readUidToStyleSetting(_selectedUid);
+            } else {
+                _readBitmaskToStyleSetting(_styleBitmask);
+            }
+
+            // Size, position & constraints
+            windowWidth.setStyle('fontWeight', _uiExpectsUserInput ? 'bold' : 'normal');
+            windowHeight.setStyle('fontWeight', _uiExpectsUserInput ? 'bold' : 'normal');
+            windowX.setStyle('fontWeight', _uiExpectsUserInput ? 'bold' : 'normal');
+            windowY.setStyle('fontWeight', _uiExpectsUserInput ? 'bold' : 'normal');
+            windowMaxWidth.setStyle('fontWeight', _uiExpectsUserInput ? 'bold' : 'normal');
+            windowMaxHeight.setStyle('fontWeight', _uiExpectsUserInput ? 'bold' : 'normal');
+            windowMinWidth.setStyle('fontWeight', _uiExpectsUserInput ? 'bold' : 'normal');
+            windowMinHeight.setStyle('fontWeight', _uiExpectsUserInput ? 'bold' : 'normal');
+            windowTitleValue.setStyle('fontWeight', _uiExpectsUserInput ? 'bold' : 'normal');
+            windowStatusValue.setStyle('fontWeight', _uiExpectsUserInput ? 'bold' : 'normal');
+            if (windowsList.selectedItem != null) {
+                if (!_uiExpectsUserInput) {
+                    _populateTextFieldsFor(_selectedUid);
+                }
+            }
+
+            // `Update now` buttons
+            updateBoundaries.enabled = (windowsList.selectedItem != null);
+            updateMinSize.enabled = (windowsList.selectedItem != null);
+            updateMaxSize.enabled = (windowsList.selectedItem != null);
+            updateWindowTitle.enabled = (windowsList.selectedItem != null);
+            updateWindowStatus.enabled = (windowsList.selectedItem != null);
+        }
+
+        private function getAlignmentUids():Object {
+            var anchorWin:Object = anchorWinValue.selectedItem;
+            var mobileWin:Object = mobileWinValue.selectedItem;
+            var anchorWinId:String = (anchorWin == LAST_TOUCHED_WINDOW) ?
+                    _lastTouchedWinUid : anchorWin ? anchorWin.uid : null;
+            var mobileWinId:String = (mobileWin == LAST_TOUCHED_WINDOW) ?
+                    _lastTouchedWinUid : mobileWin ? mobileWin.uid : null;
+            return ({"anchorWinId": anchorWinId, "mobileWinId": mobileWinId});
+        }
+
+        private function _validateAlignmentWindows(
+                anchorWinId:String, mobileWinId:String):Boolean {
+            return (anchorWinId && mobileWinId &&
+                    (anchorWinId != mobileWinId) &&
+                    (anchorWinId != WINDOW_UNKNOWN) &&
+                    (mobileWinId != WINDOW_UNKNOWN));
+        }
+
+        private function _updateAlignmentUi():void {
+            var uids:Object = getAlignmentUids();
+            var anchorWinId:String = uids.anchorWinId;
+            var mobileWinId:String = uids.mobileWinId;
+            var canAlign:Boolean = _validateAlignmentWindows(anchorWinId, mobileWinId);
+            xAlignmentLabel.enabled = canAlign;
+            xAlignmentValue.enabled = canAlign;
+            xPercentSign.enabled = canAlign;
+            yAlignmentLabel.enabled = canAlign;
+            yAlignmentValue.enabled = canAlign;
+            yPercentSign.enabled = canAlign;
+            updateAlignment.enabled = canAlign;
+        }
+
+        /**
+         * Triggered when the "updateAlignment" button is clicked.
+         * Causes selected windows to be aligned based on given parameters.
+         */
+        private function _alignSelectedWindows(event:MouseEvent = null):void {
+            var uids:Object = getAlignmentUids();
+            var anchorWinId:String = uids.anchorWinId;
+            var mobileWinId:String = uids.mobileWinId;
+            if (_validateAlignmentWindows(anchorWinId, mobileWinId)) {
+                var xAlign:Number = (xAlignmentValue.value * 0.01);
+                var yAlign:Number = (yAlignmentValue.value * 0.01);
+                _wManager.alignWindows(mobileWinId, anchorWinId, xAlign, yAlign);
+            }
+        }
+
+        private function _onCreateClick(event:MouseEvent):void {
+            // Create dummy window content
+            var rootContent:BasicWindowRootContainer = new BasicWindowRootContainer;
+            var button:Button = new Button;
+            button.label = 'Hello, World!';
+            button.x = 20;
+            button.y = 20;
+            rootContent.addChild(button);
+            var label:Text = new Text;
+            label.text = 'Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo.';
+            label.percentWidth = 100;
+            label.setStyle('paddingLeft', 20);
+            label.setStyle('paddingRight', 20);
+            label.top = (button.y + 40);
+            rootContent.addChild(label);
+            // rootContent.setStyle ('backgroundColor', '#ff0000');
+            // rootContent.setStyle ('backgroundAlpha', 0.1);
+
+            // Create window
+            var uid:String;
+            if (standaloneOption.selected) {
+                uid = _wManager.createWindow(rootContent, _styleBitmask);
+            } else if (modalOption.selected) {
+                uid = _wManager.createWindow(rootContent, _styleBitmask, true);
+            } else if (parentedOption.selected && windowsList.selectedItem != null) {
+                uid = _wManager.createWindow(rootContent, _styleBitmask, false, _selectedUid);
+            }
+            if (uid != null) {
+                _wManager.observeWindowActivity(uid, WindowActivity.DESTROY, _onDirectWindowClose, this);
+                _wManager.observeWindowActivity(uid, WindowActivity.FOCUS, _onDirectWindowFocus, this);
+                _applyBounds(uid);
+                _applyMaxSize(uid);
+                _applyMinSize(uid);
+                _applyTitle(uid);
+                _applyStatus(uid);
+
+                // Attach menu if we are on Windows and were requested to do so
+                if (OSFamily.isWindows && autoAttachWinMenu.selected) {
+                    _wManager.addEventListener(WindowsManagerEvent.MAIN_WINDOW_AVAILABLE, _onMainWindowAvailable);
+                    _wManager.addEventListener(WindowsManagerEvent.MAIN_WINDOW_BLOCKED, _onMainWindowBlocked);
+                    _wManager.addEventListener(WindowsManagerEvent.MAIN_WINDOW_UNBLOCKED, _onMainWindowUnblocked);
+                }
+
+                // Show window immediately if requested
+                if (autoShowWindow.selected) {
+                    _wManager.showWindow(uid);
+
+                    // Align selected windows if one of them is the
+                    // "last touched window" dynamic pointer.
+                    if (anchorWinValue.selectedItem && mobileWinValue.selectedItem &&
+                            (anchorWinValue.selectedItem !== mobileWinValue.selectedItem) &&
+                            ((anchorWinValue.selectedItem == LAST_TOUCHED_WINDOW) ||
+                                    (mobileWinValue.selectedItem == LAST_TOUCHED_WINDOW))) {
+                        _lastTouchedWinUid = uid;
+                        _alignSelectedWindows();
+                    }
+                }
+
+                // Set as maximized if requested
+                if (maximizedFlag.selected &&
+                        _wManager.hasStyle(uid, WindowStyle.MAXIMIZE)) {
+                    _wManager.setWindowAsMaximized(uid);
+                }
+                _uidToSelectWhenListIsRebuilt = uid;
+            } else {
+                _uidToSelectWhenListIsRebuilt = null;
+            }
+
+            // Update window list
+            _rebuildTree();
+        }
+
+        private function _onMainWindowAvailable(event:WindowsManagerEvent):void {
+            _wManager.removeEventListener(WindowsManagerEvent.MAIN_WINDOW_AVAILABLE, _onMainWindowAvailable);
+            var mainWindow:NativeWindow = event.nativeWindow;
+            _globalMenu = new GlobalMenu(
+                    '{ "menu": [ { "label" : "File", "children": [ { "label" : "New" }, { "label" : "Open..." }, { "label" : "Save" }] }, { "label" : "Edit"} ]}',
+                    NativeApplication.nativeApplication);
+            _globalMenu.registerMainWindow(mainWindow);
+            _globalMenu.attach();
+        }
+
+        private function _onMainWindowBlocked(event:WindowsManagerEvent) : void {
+            if (_globalMenu) {
+                _globalMenu.block();
+            }
+        }
+
+        private function _onMainWindowUnblocked (event : WindowsManagerEvent) : void {
+            if (_globalMenu) {
+                _globalMenu.unblock();
+            }
+        }
+
+        private function _onDestroyClick(event:MouseEvent):void {
+            if (_selectedUid) {
+                _wManager.destroyWindow(_selectedUid);
+                _uidToSelectWhenListIsRebuilt = null;
+                _rebuildTree();
+                _updateUI();
+            }
+
+        }
+
+        private function _onDirectWindowClose(...ignore):void {
+            _uidToSelectWhenListIsRebuilt = null;
+            _rebuildTree();
+        }
+
+        private function _onDirectWindowFocus(uid:String):void {
+            var item:Object = _findTreeItem(uid, _windowsListDpSrc);
+            _toggleTreeItem(item, true, true, true);
+            _selectTreeItem(item);
+        }
+
+        private function _onHideClick(event:MouseEvent):void {
+            if (_selectedUid) {
+                _wManager.hideWindow(_selectedUid);
+                _updateUI();
+            }
+        }
+
+        private function _onMaximizeClick(event:Event):void {
+            if (_selectedUid) {
+                if (_wManager.hasStyle(_selectedUid, WindowStyle.MAXIMIZE)) {
+                    _wManager.setWindowAsMaximized(_selectedUid);
+                }
+                _updateUI();
+            }
+        }
+
+        private function _onRestoreClick(event:Event):void {
+            if (_selectedUid) {
+                if (_wManager.hasStyle(_selectedUid, WindowStyle.MAXIMIZE) && _wManager.isWindowMaximized(_selectedUid)) {
+                    _wManager.unsetWindowMaximized(_selectedUid);
+                }
+                _updateUI();
+            }
+        }
+
+        private function _onInitialize(event:Event):void {
+            _emptyFlatWindowsList();
+            _updateUI();
+        }
+
+        private function _onPreinitialize(event:FlexEvent):void {
+            _wManager = new WindowsManager;
+        }
+
+        private function _onShowClick(event:MouseEvent):void {
+            if (_selectedUid) {
+                _wManager.showWindow(_selectedUid);
+                _updateUI();
+            }
+        }
+
+        private function _onStyleSelectionChange(event:Event):void {
+            var button:Button = event.target as Button;
+            var data:int = button.data as int;
+            if (button.selected) {
+                if ((_styleBitmask & data) != data) {
+                    _styleBitmask |= data;
+                }
+            } else {
+                if ((_styleBitmask & data) == data) {
+                    _styleBitmask &= ~data;
+                }
+            }
+            _readBitmaskToStyleSetting(_styleBitmask);
+        }
+
+        private function _onTreeUpdateComplete(event:FlexEvent):void {
+            windowsList.removeEventListener(FlexEvent.UPDATE_COMPLETE, _onTreeUpdateComplete);
+            var item:Object = _findTreeItem(_uidToSelectWhenListIsRebuilt, _windowsListDpSrc);
+            _toggleTreeItem(item, true, true, true);
+            _selectTreeItem(item);
+        }
+
+        private function _onUpdateBoundsClick(event:MouseEvent):void {
+            _applyBounds(_selectedUid);
+        }
+
+        private function _onClearBoundsClick (event : MouseEvent):void {
+            windowWidth.text = '';
+            windowHeight.text = '';
+            windowX.text = '';
+            windowY.text = '';
+        }
+
+        private function _onUpdateMaxSizeClick(event:MouseEvent):void {
+            _applyMaxSize(_selectedUid);
+        }
+
+        private function _onUpdateMinSizeClick(event:MouseEvent):void {
+            _applyMinSize(_selectedUid);
+        }
+
+        private function _onUpdateTitleClick(event:Event):void {
+            _applyTitle(_selectedUid);
+            _rebuildTree();
+        }
+
+        private function _onUpdateStatusClick(event:Event):void {
+            _applyStatus(_selectedUid);
+        }
+
+
+
+
+        ]]>
+	</fx:Script>
+
+    <fx:Declarations>
+        <s:RadioButtonGroup id="windowTypeRadioGroup"/>
+    </fx:Declarations>
+
+    <!-- TITLE -->
+    <mx:Label fontSize="20"
+              fontWeight="normal"
+              left="15"
+              text="Windows Manager Library"
+              top="15"/>
+    <mx:Label fontSize="14"
+              fontWeight="normal"
+              left="15"
+              text="Manual Tester"
+              top="45"/>
+
+    <!-- Boundaries -->
+    <mx:Label fontSize="12"
+              fontWeight="bold"
+              id="boundariesHeader"
+              left="15"
+              text="Boundaries"
+              top="95"/>
+    <mx:Label height="22"
+              id="windowWidthLabel"
+              left="15"
+              text="Width:"
+              top="118"/>
+    <mx:TextInput change="_uiExpectsUserInput = true"
+                  id="windowWidth"
+                  text="{DEFAULT_WIDTH}"
+                  tabIndex="1"
+                  textAlign="right"
+                  top="118"
+                  width="52"
+                  x="63"/>
+    <mx:Label height="22"
+              id="windowHeightLabel"
+              left="15"
+              text="Height:"
+              top="148"/>
+    <mx:TextInput change="_uiExpectsUserInput = true"
+                  id="windowHeight"
+                  text="{DEFAULT_HEIGHT}"
+                  tabIndex="2"
+                  textAlign="right"
+                  top="148"
+                  width="52"
+                  x="63"/>
+    <mx:Label height="22"
+              id="windowXLabel"
+              left="15"
+              text="X:"
+              top="178"/>
+    <mx:TextInput change="_uiExpectsUserInput = true"
+                  id="windowX"
+                  text="{DEFAULT_X}"
+                  tabIndex="3"
+                  textAlign="right"
+                  top="178"
+                  width="52"
+                  x="63"/>
+    <mx:Label height="22"
+              id="windowYLabel"
+              left="15"
+              text="Y:"
+              top="208"/>
+    <mx:TextInput change="_uiExpectsUserInput = true"
+                  id="windowY"
+                  text="{DEFAULT_Y}"
+                  tabIndex="4"
+                  textAlign="right"
+                  top="208"
+                  width="52"
+                  x="63"/>
+    <mx:CheckBox id="constrainBoundariesToScreen"
+                 label="Keep in screen"
+                 left="15"
+                 top="236"/>
+    <mx:LinkButton click="_onUpdateBoundsClick(event); _uiExpectsUserInput = false"
+                   id="updateBoundaries"
+                   label="Update Now"
+                   left="15"
+                   styleName="classicLink"
+                   tabIndex="5"
+                   top="263"/>
+    <mx:LinkButton click="_onClearBoundsClick(event); _uiExpectsUserInput = false"
+                   id="clearBoundaries"
+                   label="Clear"
+                   left="15"
+                   styleName="classicLink"
+                   tabIndex="5"
+                   top="290"/>
+
+    <!-- Resize Constraints -->
+    <!-- MAX -->
+    <mx:Label fontSize="12"
+              fontWeight="bold"
+              id="resizeConstraintsHeader"
+              text="Resize Constraints"
+              x="159"
+              y="95"/>
+    <mx:Label height="22"
+              id="windowMaxWidthLabel"
+              text="Max. Width:"
+              top="118"
+              x="159"/>
+    <mx:TextInput change="_uiExpectsUserInput = true;"
+                  id="windowMaxWidth"
+                  tabIndex="6"
+                  textAlign="right"
+                  top="118"
+                  width="52"
+                  x="237"/>
+    <mx:Label height="22"
+              id="windowMaxHeightLabel"
+              text="Max. Height:"
+              top="148"
+              x="159"/>
+    <mx:TextInput change="_uiExpectsUserInput = true;"
+                  id="windowMaxHeight"
+                  tabIndex="7"
+                  textAlign="right"
+                  top="148"
+                  width="52"
+                  x="237"/>
+    <mx:CheckBox id="constrainMaximumToScreen"
+                 label="Keep in screen"
+                 top="178"
+                 x="161"/>
+    <mx:LinkButton click="_onUpdateMaxSizeClick(event); _uiExpectsUserInput = false"
+                   id="updateMaxSize"
+                   label="Update Now"
+                   styleName="classicLink"
+                   tabIndex="10"
+                   top="208"
+                   x="159"/>
+    <!-- MIN -->
+    <mx:Label height="22"
+              id="windowMinWidthLabel"
+              text="Min. Width:"
+              top="263"
+              x="159"/>
+    <mx:TextInput change="_uiExpectsUserInput = true;"
+                  id="windowMinWidth"
+                  tabIndex="8"
+                  textAlign="right"
+                  top="263"
+                  width="52"
+                  x="237"/>
+    <mx:Label height="22"
+              id="windowMinHeightLabel"
+              text="Min. Height:"
+              top="293"
+              x="159"/>
+    <mx:TextInput change="_uiExpectsUserInput = true;"
+                  id="windowMinHeight"
+                  tabIndex="9"
+                  textAlign="right"
+                  top="293"
+                  width="52"
+                  x="237"/>
+    <mx:CheckBox id="constrainMinimumToScreen"
+                 label="Keep in screen"
+                 top="323"
+                 x="159"/>
+    <mx:LinkButton click="_onUpdateMinSizeClick(event); _uiExpectsUserInput = false"
+                   id="updateMinSize"
+                   label="Update Now"
+                   styleName="classicLink"
+                   tabIndex="10"
+                   top="353"
+                   x="159"/>
+
+    <!-- Window Features -->
+    <mx:Label fontSize="12"
+              fontWeight="bold"
+              id="windowFeaturesHeader"
+              text="Window Features"
+              top="95"
+              x="340"/>
+    <mx:TextInput change="_uiExpectsUserInput = true;"
+                  id="windowTitleValue"
+                  left="340"
+                  text="Window Title"
+                  tabIndex="3"
+                  textAlign="left"
+                  top="118"
+                  width="129"/>
+    <mx:LinkButton click="_onUpdateTitleClick(event); _uiExpectsUserInput = false"
+                   id="updateWindowTitle"
+                   label="Update Now"
+                   left="473"
+                   styleName="classicLink"
+                   tabIndex="10"
+                   top="118"/>
+
+    <mx:TextInput change="_uiExpectsUserInput = true;"
+                  id="windowStatusValue"
+                  left="340"
+                  text="Window Status"
+                  tabIndex="3"
+                  textAlign="left"
+                  top="148"
+                  width="129"/>
+    <mx:LinkButton click="_onUpdateStatusClick(event); _uiExpectsUserInput = false"
+                   id="updateWindowStatus"
+                   label="Update Now"
+                   left="473"
+                   styleName="classicLink"
+                   tabIndex="10"
+                   top="148"/>
+
+    <!-- Styles -->
+    <mx:Label id="stylesLabel"
+              left="340"
+              right="271"
+              text="Styles only apply at creation time.&#xd;Illegal combinations will be ignored."
+              top="178"/>
+    <mx:CheckBox click="_onStyleSelectionChange(event)"
+                 data="{WindowStyle.HEADER}"
+                 id="titleStyle"
+                 label="HEADER"
+                 left="340"
+                 top="208"/>
+    <mx:CheckBox click="_onStyleSelectionChange(event)"
+                 data="{WindowStyle.FOOTER}"
+                 id="statusStyle"
+                 label="FOOTER"
+                 left="340"
+                 top="236"/>
+    <mx:CheckBox click="_onStyleSelectionChange(event)"
+                 data="{WindowStyle.TASKBAR}"
+                 id="taskbarStyle"
+                 label="TASKBAR"
+                 left="340"
+                 top="263"/>
+    <mx:CheckBox click="_onStyleSelectionChange(event)"
+                 data="{WindowStyle.TRANSPARENT}"
+                 height="19"
+                 id="transparentStyle"
+                 label="TRANSPARENT"
+                 left="340"
+                 top="293"/>
+    <mx:CheckBox click="_onStyleSelectionChange(event)"
+                 data="{WindowStyle.NATIVE}"
+                 height="19"
+                 id="nativeStyle"
+                 label="NATIVE"
+                 left="340"
+                 top="323"/>
+    <mx:CheckBox click="_onStyleSelectionChange(event)"
+                 data="{WindowStyle.MINIMIZE}"
+                 id="minimizeStyle"
+                 label="MINIMIZE"
+                 left="475"
+                 right="271"
+                 top="208"/>
+    <mx:CheckBox click="_onStyleSelectionChange(event)"
+                 data="{WindowStyle.MAXIMIZE}"
+                 id="maximizeStyle"
+                 label="MAXIMIZE"
+                 left="475"
+                 right="409"
+                 top="236"/>
+    <mx:CheckBox click="_onStyleSelectionChange(event)"
+                 data="{WindowStyle.RESIZE}"
+                 id="resizeStyle"
+                 label="RESIZE"
+                 left="475"
+                 top="263"/>
+    <mx:CheckBox click="_onStyleSelectionChange(event)"
+                 data="{WindowStyle.TOP}"
+                 id="alwaysInFrontStyle"
+                 label="TOP"
+                 left="475"
+                 top="293"/>
+
+    <!-- Relative alignment -->
+    <mx:Label fontSize="12"
+              fontWeight="bold"
+              id="windowAlignmentHeader"
+              text="Relative Alignment"
+              top="95"
+              x="600"/>
+
+    <mx:Label height="22"
+              id="anchorWinLabel"
+              left="600"
+              text="Anchor window:"
+              top="118"/>
+    <s:DropDownList id="anchorWinValue"
+                    prompt="Select a window"
+                    tabIndex="1"
+                    top="118"
+                    width="152"
+                    x="700"
+                    open="anchorWinValue.dropDown.width = 180"
+                    dataProvider="{_flatWindowsList}"
+                    labelField="label"
+                    change="_updateAlignmentUi()"/>
+
+    <mx:Label height="22"
+              id="mobileWinLabel"
+              left="600"
+              text="Aligned window:"
+              top="148"/>
+    <s:DropDownList id="mobileWinValue"
+                    prompt="Select a window"
+                    tabIndex="2"
+                    top="148"
+                    width="152"
+                    x="700"
+                    open="mobileWinValue.dropDown.width = 180"
+                    dataProvider="{_flatWindowsList}"
+                    labelField="label"
+                    change="_updateAlignmentUi()"/>
+
+    <mx:Label height="22"
+              id="xAlignmentLabel"
+              left="600"
+              text="Horizontally:"
+              top="178"/>
+    <s:NumericStepper id="xAlignmentValue"
+                      tabIndex="3"
+                      x="700"
+                      top="178"
+                      width="80"
+                      value="50"
+                      stepSize="10"
+                      snapInterval="10"
+                      allowValueWrap="false"
+                      maximum="100"
+                      minimum="0"/>
+    <mx:Label height="22"
+              id="xPercentSign"
+              left="785"
+              text="%"
+              top="178"/>
+
+    <mx:Label height="22"
+              id="yAlignmentLabel"
+              left="600"
+              text="Vertically:"
+              top="208"/>
+    <s:NumericStepper id="yAlignmentValue"
+                      tabIndex="4"
+                      x="700"
+                      top="208"
+                      width="80"
+                      value="50"
+                      stepSize="10"
+                      snapInterval="10"
+                      allowValueWrap="false"
+                      maximum="100"
+                      minimum="0"/>
+    <mx:Label height="22"
+              id="yPercentSign"
+              left="785"
+              text="%"
+              top="208"/>
+    <mx:LinkButton id="updateAlignment"
+                   label="Update Now"
+                   left="600"
+                   styleName="classicLink"
+                   tabIndex="5"
+                   top="238"
+                   click="_alignSelectedWindows(event)"/>
+
+    <!-- Windows List -->
+    <mx:Label fontSize="12"
+              fontWeight="bold"
+              id="relationshipsHeader"
+              left="881"
+              text="Available Windows"
+              y="95"/>
+    <mx:Tree bottom="153"
+             change="_updateUI(event)"
+             id="windowsList"
+             left="881"
+             right="15"
+             showRoot="false"
+             top="118">
+    </mx:Tree>
+
+    <!-- OPERATIONS -->
+    <mx:Label fontStyle="italic"
+              fontWeight="bold"
+              id="operationsHeader"
+              left="15"
+              text="Operations"
+              top="456"/>
+    <mx:HRule id="operationsHRule"
+              left="15"
+              right="15"
+              y="475"/>
+
+    <!-- Window type -->
+    <mx:Label id="windowTypeGroupLabel"
+              left="15"
+              text="Create window as:"
+              top="485"/>
+    <mx:RadioButton click="_updateUI(event)"
+                    groupName="windowTypeRadioGroup"
+                    id="standaloneOption"
+                    label="stand-alone"
+                    selected="true"
+                    top="485"
+                    x="126"/>
+    <mx:RadioButton click="_updateUI(event)"
+                    groupName="windowTypeRadioGroup"
+                    id="modalOption"
+                    label="application modal"
+                    top="485"
+                    x="219"/>
+    <mx:RadioButton click="_updateUI(event)"
+                    groupName="windowTypeRadioGroup"
+                    id="parentedOption"
+                    label="parented (selection required)"
+                    enabled="false"
+                    top="485"
+                    x="344"/>
+
+    <!-- Post creation tasks -->
+    <s:Group left="0" top="500">
+        <s:layout>
+            <s:HorizontalLayout padding="15"/>
+        </s:layout>
+        <mx:Label id="postCreationOptionsLabel"
+                  text="Once created:"
+        />
+        <mx:CheckBox id="autoShowWindow"
+                     label="immediately show"
+                     selected="true"
+        />
+        <mx:CheckBox id="maximizedFlag"
+                     label="set as maximized"
+        />
+        <mx:CheckBox id="autoAttachWinMenu"
+                     label="attach native menu on Windows"
+                     enabled="{_hasNativeChrome &amp;&amp; OSFamily.isWindows}"
+        />
+    </s:Group>
+
+    <!-- Actual operations -->
+    <mx:Button click="_onCreateClick(event); _uiExpectsUserInput = false"
+               enabled="false"
+               id="createWindow"
+               label="Create"
+               left="15"
+               top="547"
+               width="105"/>
+    <mx:Button click="_onDestroyClick(event)"
+               enabled="false"
+               id="destroyWindow"
+               label="Destroy"
+               left="138"
+               top="547"
+               width="105"/>
+    <mx:Button click="_onShowClick(event)"
+               enabled="false"
+               id="showWindow"
+               label="Show"
+               top="547"
+               width="105"
+               x="261"/>
+    <mx:Button click="_onHideClick(event)"
+               enabled="false"
+               id="hideWindow"
+               label="Hide"
+               top="547"
+               width="105"
+               x="385"/>
+    <mx:Button click="_onMaximizeClick(event)"
+               enabled="false"
+               id="maximizeWindow"
+               label="Maximize"
+               top="547"
+               width="105"
+               x="509"/>
+    <mx:Button click="_onRestoreClick(event)"
+               enabled="false"
+               id="restoreWindow"
+               label="Restore"
+               top="547"
+               width="105"
+               x="633"/>
+
+</mx:WindowedApplication>

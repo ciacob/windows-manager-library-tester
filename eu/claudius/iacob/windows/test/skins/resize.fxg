@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Graphic xmlns="http://ns.adobe.com/fxg/2008" xmlns:fxg="http://ns.adobe.com/fxg/2008" xmlns:d="http://ns.adobe.com/fxg/2008/dt" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" xmlns:svg="http://www.w3.org/Graphics/SVG/1.1/DTD/svg11-tiny.dtd" version="2.0">
+  <!--Unknown tag: metadata-->
+  <!--Unknown tag: defs-->
+  <!--Unknown tag: sodipodi:namedview-->
+  <Group id="g18">
+    <Path data="M128 13.3v101.3c0 7.3-6 13.3-13.3 13.3H13.3C6 128 0 122 0 114.7V13.3C0 6 6 0 13.3 0h101.3C122 0 128 6 128 13.3z M114.7 122.7c4.4 0 8-3.6 8-8V13.3c0-4.4-3.6-8-8-8H13.3c-4.4 0-8 3.6-8 8v101.3c0 4.4 3.6 8 8 8H114.7z" winding="nonZero" id="path10">
+      <fill>
+        <SolidColor color="#ffffff" alpha="1"/>
+      </fill>
+    </Path>
+    <Rect x="48" y="48" width="5" height="32" id="rect12">
+      <fill>
+        <SolidColor color="#ffffff" alpha="1"/>
+      </fill>
+    </Rect>
+    <Rect x="48" y="48" width="32" height="5" id="rect14">
+      <fill>
+        <SolidColor color="#ffffff" alpha="1"/>
+      </fill>
+    </Rect>
+    <Group>
+      <transform>
+        <Transform>
+          <matrix>
+            <Matrix a="0.7071" b="-0.7071" c="0.7071" d="0.7071" tx="-36.13" ty="87.22"/>
+          </matrix>
+        </Transform>
+      </transform>
+      <Rect x="85" y="36" width="5" height="103" id="rect16">
+        <fill>
+          <SolidColor color="#000000" alpha="1"/>
+        </fill>
+      </Rect>
+    </Group>
+  </Group>
+</Graphic>

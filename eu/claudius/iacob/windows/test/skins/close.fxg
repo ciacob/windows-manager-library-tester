@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Graphic xmlns="http://ns.adobe.com/fxg/2008" xmlns:fxg="http://ns.adobe.com/fxg/2008" xmlns:d="http://ns.adobe.com/fxg/2008/dt" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" xmlns:svg="http://www.w3.org/Graphics/SVG/1.1/DTD/svg11-tiny.dtd" version="2.0">
+  <!--Unknown tag: metadata-->
+  <!--Unknown tag: defs-->
+  <!--Unknown tag: sodipodi:namedview-->
+  <Group id="g80">
+    <Path data="M126.6 3.1c-1.7-1.7-4.3-1.7-5.8 0l-56 55.9L7.2 1.2c-1.7-1.7-4.3-1.7-5.8 0c-1.7 1.7-1.7 4.3 0 5.8l57.5 57.7L1.2 122.4 c-1.7 1.7-1.7 4.3 0 5.8c0.8 0.8 1.8 1.2 3 1.2s2.2-0.3 3-1.2l57.7-57.7l55.9 55.9c0.8 0.8 1.8 1.2 3 1.2s2.2-0.3 3-1.2 c1.7-1.7 1.7-4.3 0-5.8l-56-55.9l55.9-55.9C128.1 7.2 128.1 4.6 126.6 3.1z" winding="nonZero" id="path78">
+      <fill>
+        <SolidColor color="#000000" alpha="1"/>
+      </fill>
+    </Path>
+  </Group>
+</Graphic>
