@@ -95,6 +95,7 @@
         import ro.ciacob.desktop.windows.WindowsManager;
         import ro.ciacob.desktop.windows.WindowsManagerEvent;
         import ro.ciacob.utils.OSFamily;
+        import ro.ciacob.utils.ScreenUtils;
         import ro.ciacob.utils.Strings;
         import ro.ciacob.utils.Time;
 
@@ -106,7 +107,7 @@
         private static const DEFAULT_WIDTH:Number = 500;
         private static const DEFAULT_HEIGHT:Number = 380;
         private static const DEFAULT_X:Number = 200;
-        private static const DEFAULT_Y : Number = 200;
+        private static const DEFAULT_Y:Number = 200;
 
         private var _styleBitmask:int = WindowStyle.MAIN;
         private var _uiExpectsUserInput:Boolean;
@@ -114,10 +115,13 @@
         private var _wManager:WindowsManager;
         private var _windowsListDpSrc:Object;
         private var _lastTouchedWinUid:String = WINDOW_UNKNOWN;
-        private var _globalMenu : GlobalMenu;
+        private var _globalMenu:GlobalMenu;
 
         [Bindable]
         private var _flatWindowsList:ArrayCollection = new ArrayCollection;
+
+        [Bindable]
+        private var _screensList:ArrayCollection = new ArrayCollection;
 
         [Bindable]
         private var _hasNativeChrome:Boolean;
@@ -127,6 +131,7 @@
             _flatWindowsList.removeAll();
             _flatWindowsList.addItem(LAST_TOUCHED_WINDOW);
             _updateAlignmentUi();
+            _updateScreenAlignmentUi();
         }
 
         private function _applyBounds(uid:String):void {
@@ -170,7 +175,7 @@
             }
         }
 
-        private function _findTreeItem(searchUid:String, parentObj:Object):Object {
+        private static function _findTreeItem(searchUid:String, parentObj:Object):Object {
             if (parentObj != null) {
                 if (parentObj['uid'] == searchUid) {
                     return parentObj;
@@ -296,10 +301,16 @@
             _windowsListDpSrc = _queryWindowsHierarchy();
 
             // We keep the original query result Object as `_windowsListDpSrc`, because
-            // the Tree transparently converts it into an ArryaCollection upon assignment.
+            // the Tree transparently converts it into an ArrayCollection upon assignment.
             windowsList.dataProvider = null;
             windowsList.addEventListener(FlexEvent.UPDATE_COMPLETE, _onTreeUpdateComplete);
             windowsList.dataProvider = _windowsListDpSrc;
+        }
+
+
+        private function _rebuildScreensList():void {
+            anchorScreenValue.selectedItem = null;
+            _screensList = new ArrayCollection(ScreenUtils.getScreensInfo());
         }
 
         private function _selectTreeItem(item:Object, delay:Number = 0.5):void {
@@ -338,8 +349,7 @@
         }
 
         private function _updateUI(event:Event = null):void {
-
-            var haveSelectedWin : Boolean = (windowsList.selectedItem != null);
+            var haveSelectedWin:Boolean = (windowsList.selectedItem != null);
 
             // 'Standalone' option. Automatically ticked if no window is selected from the list.
             if (windowsList.selectedItem == null) {
@@ -402,7 +412,7 @@
             updateWindowStatus.enabled = (windowsList.selectedItem != null);
         }
 
-        private function getAlignmentUids():Object {
+        private function _getRelativeAlignmentUids():Object {
             var anchorWin:Object = anchorWinValue.selectedItem;
             var mobileWin:Object = mobileWinValue.selectedItem;
             var anchorWinId:String = (anchorWin == LAST_TOUCHED_WINDOW) ?
@@ -412,7 +422,7 @@
             return ({"anchorWinId": anchorWinId, "mobileWinId": mobileWinId});
         }
 
-        private function _validateAlignmentWindows(
+        private static function _validateRelativeAlignment(
                 anchorWinId:String, mobileWinId:String):Boolean {
             return (anchorWinId && mobileWinId &&
                     (anchorWinId != mobileWinId) &&
@@ -421,10 +431,10 @@
         }
 
         private function _updateAlignmentUi():void {
-            var uids:Object = getAlignmentUids();
+            var uids:Object = _getRelativeAlignmentUids();
             var anchorWinId:String = uids.anchorWinId;
             var mobileWinId:String = uids.mobileWinId;
-            var canAlign:Boolean = _validateAlignmentWindows(anchorWinId, mobileWinId);
+            var canAlign:Boolean = _validateRelativeAlignment(anchorWinId, mobileWinId);
             xAlignmentLabel.enabled = canAlign;
             xAlignmentValue.enabled = canAlign;
             xPercentSign.enabled = canAlign;
@@ -434,18 +444,60 @@
             updateAlignment.enabled = canAlign;
         }
 
+        private function _getAbsoluteAlignmentUids():Object {
+            var selectedAnchorScreen:Object = anchorScreenValue.selectedItem;
+            var anchorScreenId:String = selectedAnchorScreen ? selectedAnchorScreen.uid : null;
+            var selectedAligningWindow:Object = aligningWinValue.selectedItem;
+            var aligningWinId:String = (selectedAligningWindow == LAST_TOUCHED_WINDOW) ?
+                    _lastTouchedWinUid : selectedAligningWindow ? selectedAligningWindow.uid : null;
+            return ({"anchorScreenId": anchorScreenId, "aligningWinId": aligningWinId});
+        }
+
+        private static function _validateAbsoluteAlignment(anchorScreenId:String,
+                                                           aligningWinId:String):Boolean {
+            return (anchorScreenId && (aligningWinId && aligningWinId != WINDOW_UNKNOWN));
+        }
+
+        private function _updateScreenAlignmentUi():void {
+            var uids:Object = _getAbsoluteAlignmentUids();
+            var anchorScreenId:String = uids.anchorScreenId;
+            var aligningWinId:String = uids.aligningWinId;
+            var canAlign:Boolean = _validateAbsoluteAlignment(anchorScreenId, aligningWinId);
+            xScreenAlignmentLabel.enabled =
+                    xScreenAlignmentValue.enabled =
+                            xScreenPercentSign.enabled =
+                                    yScreenAlignmentLabel.enabled =
+                                            yScreenAlignmentValue.enabled =
+                                                    yScreenPercentSign.enabled =
+                                                            updateScreenAlignment.enabled = canAlign;
+        }
+
         /**
-         * Triggered when the "updateAlignment" button is clicked.
          * Causes selected windows to be aligned based on given parameters.
          */
         private function _alignSelectedWindows(event:MouseEvent = null):void {
-            var uids:Object = getAlignmentUids();
+            var uids:Object = _getRelativeAlignmentUids();
             var anchorWinId:String = uids.anchorWinId;
             var mobileWinId:String = uids.mobileWinId;
-            if (_validateAlignmentWindows(anchorWinId, mobileWinId)) {
+            if (_validateRelativeAlignment(anchorWinId, mobileWinId)) {
                 var xAlign:Number = (xAlignmentValue.value * 0.01);
                 var yAlign:Number = (yAlignmentValue.value * 0.01);
                 _wManager.alignWindows(mobileWinId, anchorWinId, xAlign, yAlign);
+            }
+        }
+
+        /**
+         * Cuases selected window to be aligned to selected screen based on given parameters.
+         * @param event
+         */
+        private function _alignWindowToScreen(event:MouseEvent = null):void {
+            var uids:Object = _getAbsoluteAlignmentUids();
+            var anchorScreenUid:String = uids.anchorScreenId;
+            var aligningWinId:String = uids.aligningWinId;
+            if (_validateAbsoluteAlignment(anchorScreenUid, aligningWinId)) {
+                var xAlign:Number = (xScreenAlignmentValue.value * 0.01);
+                var yAlign:Number = (yScreenAlignmentValue.value * 0.01);
+                _wManager.alignWindowToScreen(aligningWinId, anchorScreenUid, xAlign, yAlign);
             }
         }
 
@@ -496,14 +548,26 @@
                 if (autoShowWindow.selected) {
                     _wManager.showWindow(uid);
 
-                    // Align selected windows if one of them is the
-                    // "last touched window" dynamic pointer.
+                    // Perform a relative (window to window) alignment operation if we have both "anchor" and "mobile"
+                    // fields set to non-null values under the "Relative alignment" section AND at least one of those
+                    // values is the "last touched window" dynamic pointer.
                     if (anchorWinValue.selectedItem && mobileWinValue.selectedItem &&
                             (anchorWinValue.selectedItem !== mobileWinValue.selectedItem) &&
                             ((anchorWinValue.selectedItem == LAST_TOUCHED_WINDOW) ||
                                     (mobileWinValue.selectedItem == LAST_TOUCHED_WINDOW))) {
                         _lastTouchedWinUid = uid;
                         _alignSelectedWindows();
+                    } else {
+
+                        // Perform an absolute (window to screen) alignment operation if (1) we have both "screen" and
+                        // "window" fields set to non-null values under the "Absolute alignment" section, AND (2) we have no
+                        // eligible values in the "Relative alignment" section, AND (3) the "window" set under the "Absolute
+                        // alignment" section is the "last touched window" dynamic pointer.
+                        if (anchorScreenValue.selectedItem && aligningWinValue.selectedItem &&
+                                aligningWinValue.selectedItem == LAST_TOUCHED_WINDOW) {
+                            _lastTouchedWinUid = uid;
+                            _alignWindowToScreen();
+                        }
                     }
                 }
 
@@ -531,13 +595,13 @@
             _globalMenu.attach();
         }
 
-        private function _onMainWindowBlocked(event:WindowsManagerEvent) : void {
+        private function _onMainWindowBlocked(event:WindowsManagerEvent):void {
             if (_globalMenu) {
                 _globalMenu.block();
             }
         }
 
-        private function _onMainWindowUnblocked (event : WindowsManagerEvent) : void {
+        private function _onMainWindowUnblocked(event:WindowsManagerEvent):void {
             if (_globalMenu) {
                 _globalMenu.unblock();
             }
@@ -590,6 +654,7 @@
         }
 
         private function _onInitialize(event:Event):void {
+            _rebuildScreensList();
             _emptyFlatWindowsList();
             _updateUI();
         }
@@ -631,7 +696,7 @@
             _applyBounds(_selectedUid);
         }
 
-        private function _onClearBoundsClick (event : MouseEvent):void {
+        private function _onClearBoundsClick(event:MouseEvent):void {
             windowWidth.text = '';
             windowHeight.text = '';
             windowX.text = '';
@@ -654,10 +719,6 @@
         private function _onUpdateStatusClick(event:Event):void {
             _applyStatus(_selectedUid);
         }
-
-
-
-
         ]]>
 	</fx:Script>
 
@@ -939,96 +1000,190 @@
                  left="475"
                  top="293"/>
 
-    <!-- Relative alignment -->
-    <mx:Label fontSize="12"
-              fontWeight="bold"
-              id="windowAlignmentHeader"
-              text="Relative Alignment"
-              top="95"
-              x="600"/>
+    <!-- column 4 -->
+    <s:Group x="600" y="95" width="250" height="355">
+        <s:layout>
+            <s:VerticalLayout horizontalAlign="justify"/>
+        </s:layout>
 
-    <mx:Label height="22"
-              id="anchorWinLabel"
-              left="600"
-              text="Anchor window:"
-              top="118"/>
-    <s:DropDownList id="anchorWinValue"
-                    prompt="Select a window"
-                    tabIndex="1"
-                    top="118"
-                    width="152"
-                    x="700"
-                    open="anchorWinValue.dropDown.width = 180"
-                    dataProvider="{_flatWindowsList}"
-                    labelField="label"
-                    change="_updateAlignmentUi()"/>
+        <!-- Relative alignment -->
+        <mx:Label fontSize="12"
+                  fontWeight="bold"
+                  id="windowAlignmentHeader"
+                  text="Relative Alignment"/>
 
-    <mx:Label height="22"
-              id="mobileWinLabel"
-              left="600"
-              text="Aligned window:"
-              top="148"/>
-    <s:DropDownList id="mobileWinValue"
-                    prompt="Select a window"
-                    tabIndex="2"
-                    top="148"
-                    width="152"
-                    x="700"
-                    open="mobileWinValue.dropDown.width = 180"
-                    dataProvider="{_flatWindowsList}"
-                    labelField="label"
-                    change="_updateAlignmentUi()"/>
+        <s:HGroup>
+            <mx:Label
+                    id="anchorWinLabel"
+                    text="Anchor window:"
+                    width="40%"/>
+            <s:DropDownList id="anchorWinValue"
+                            typicalItem=""
+                            prompt="Select a window"
+                            tabIndex="1"
+                            width="60%"
+                            open="anchorWinValue.dropDown.width = 220"
+                            dataProvider="{_flatWindowsList}"
+                            labelField="label"
+                            change="_updateAlignmentUi()"/>
+        </s:HGroup>
 
-    <mx:Label height="22"
-              id="xAlignmentLabel"
-              left="600"
-              text="Horizontally:"
-              top="178"/>
-    <s:NumericStepper id="xAlignmentValue"
-                      tabIndex="3"
-                      x="700"
-                      top="178"
-                      width="80"
-                      value="50"
-                      stepSize="10"
-                      snapInterval="10"
-                      allowValueWrap="false"
-                      maximum="100"
-                      minimum="0"/>
-    <mx:Label height="22"
-              id="xPercentSign"
-              left="785"
-              text="%"
-              top="178"/>
+        <s:HGroup>
+            <mx:Label
+                    id="mobileWinLabel"
+                    text="Aligned window:"
+                    width="40%"
+            />
+            <s:DropDownList id="mobileWinValue"
+                            prompt="Select a window"
+                            tabIndex="2"
+                            width="60%"
+                            open="mobileWinValue.dropDown.width = 220"
+                            dataProvider="{_flatWindowsList}"
+                            labelField="label"
+                            change="_updateAlignmentUi()"/>
+        </s:HGroup>
 
-    <mx:Label height="22"
-              id="yAlignmentLabel"
-              left="600"
-              text="Vertically:"
-              top="208"/>
-    <s:NumericStepper id="yAlignmentValue"
-                      tabIndex="4"
-                      x="700"
-                      top="208"
-                      width="80"
-                      value="50"
-                      stepSize="10"
-                      snapInterval="10"
-                      allowValueWrap="false"
-                      maximum="100"
-                      minimum="0"/>
-    <mx:Label height="22"
-              id="yPercentSign"
-              left="785"
-              text="%"
-              top="208"/>
-    <mx:LinkButton id="updateAlignment"
-                   label="Update Now"
-                   left="600"
-                   styleName="classicLink"
-                   tabIndex="5"
-                   top="238"
-                   click="_alignSelectedWindows(event)"/>
+        <s:HGroup>
+            <mx:Label
+                    id="xAlignmentLabel"
+                    text="Horizontally:"
+                    width="40%"/>
+            <s:HGroup width="60%">
+                <s:NumericStepper id="xAlignmentValue"
+                                  tabIndex="3"
+                                  value="50"
+                                  stepSize="10"
+                                  snapInterval="10"
+                                  allowValueWrap="false"
+                                  maximum="100"
+                                  minimum="0"/>
+                <mx:Label height="22"
+                          id="xPercentSign"
+                          text="%"/>
+            </s:HGroup>
+        </s:HGroup>
+
+        <s:HGroup>
+            <mx:Label id="yAlignmentLabel"
+                      text="Vertically:"
+                      width="40%"/>
+            <s:HGroup width="60%">
+                <s:NumericStepper id="yAlignmentValue"
+                                  tabIndex="4"
+                                  value="50"
+                                  stepSize="10"
+                                  snapInterval="10"
+                                  allowValueWrap="false"
+                                  maximum="100"
+                                  minimum="0"/>
+                <mx:Label height="22"
+                          id="yPercentSign"
+                          left="785"
+                          text="%"
+                          top="208"/>
+            </s:HGroup>
+        </s:HGroup>
+
+        <mx:LinkButton id="updateAlignment"
+                       label="Update Now"
+                       left="600"
+                       styleName="classicLink"
+                       tabIndex="5"
+                       top="238"
+                       click="_alignSelectedWindows(event)"/>
+
+        <s:Spacer/>
+
+        <!-- Absolute alignment -->
+        <mx:Label fontSize="12"
+                  fontWeight="bold"
+                  id="screenAlignmentHeader"
+                  text="Absolute Alignment"/>
+
+        <s:HGroup>
+            <mx:Label
+                    id="anchorScreenLabel"
+                    text="Anchor screen:"
+                    width="40%"/>
+            <s:DropDownList id="anchorScreenValue"
+                            prompt="Select a screen"
+                            tabIndex="1"
+                            width="60%"
+                            open="anchorScreenValue.dropDown.width = 220"
+                            dataProvider="{_screensList}"
+                            labelField="label"
+                            change="_updateScreenAlignmentUi()"/>
+        </s:HGroup>
+
+        <s:HGroup>
+            <mx:Label
+                    id="alignedWinLabel"
+                    text="Window to align:"
+                    width="40%"
+            />
+            <s:DropDownList id="aligningWinValue"
+                            prompt="Select a window"
+                            tabIndex="2"
+                            width="60%"
+                            open="aligningWinValue.dropDown.width = 220"
+                            dataProvider="{_flatWindowsList}"
+                            labelField="label"
+                            change="_updateScreenAlignmentUi()"/>
+        </s:HGroup>
+
+        <s:HGroup>
+            <mx:Label
+                    id="xScreenAlignmentLabel"
+                    text="Horizontally:"
+                    width="40%"/>
+            <s:HGroup width="60%">
+                <s:NumericStepper id="xScreenAlignmentValue"
+                                  tabIndex="3"
+                                  value="50"
+                                  stepSize="10"
+                                  snapInterval="10"
+                                  allowValueWrap="false"
+                                  maximum="100"
+                                  minimum="0"/>
+                <mx:Label height="22"
+                          id="xScreenPercentSign"
+                          text="%"/>
+            </s:HGroup>
+        </s:HGroup>
+
+        <s:HGroup>
+            <mx:Label id="yScreenAlignmentLabel"
+                      text="Vertically:"
+                      width="40%"/>
+            <s:HGroup width="60%">
+                <s:NumericStepper id="yScreenAlignmentValue"
+                                  tabIndex="4"
+                                  value="50"
+                                  stepSize="10"
+                                  snapInterval="10"
+                                  allowValueWrap="false"
+                                  maximum="100"
+                                  minimum="0"/>
+                <mx:Label height="22"
+                          id="yScreenPercentSign"
+                          left="785"
+                          text="%"
+                          top="208"/>
+            </s:HGroup>
+        </s:HGroup>
+
+        <mx:LinkButton id="updateScreenAlignment"
+                       label="Update Now"
+                       left="600"
+                       styleName="classicLink"
+                       tabIndex="5"
+                       top="238"
+                       click="_alignWindowToScreen(event)"/>
+
+
+    </s:Group>
+
 
     <!-- Windows List -->
     <mx:Label fontSize="12"

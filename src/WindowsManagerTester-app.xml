@@ -47,7 +47,7 @@
 		<!-- The main SWF or HTML file of the application. Required. -->
 		<!-- Note: In Flash Builder, the SWF reference is set automatically. -->
 		<content>windowsmanagertester.swf</content>
-
+		<contentDPI>high</contentDPI>
 		<requestedDisplayResolution>high</requestedDisplayResolution>
 		
 		<!-- The title of the main window. Optional. -->
